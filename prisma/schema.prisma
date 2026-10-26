@@ -1,7 +1,8 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// ============================================================
+// Prisma Schema
+// Project: Nojha Sales Management
+// Database: PostgreSQL
+// ============================================================
 
 generator client {
   provider = "prisma-client"
@@ -12,37 +13,115 @@ datasource db {
   provider = "postgresql"
 }
 
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum OtpPurpose {
+  LOGIN
+}
+
+enum ContactType {
+  PHONE
+  IN_PERSON
+  OTHER
+}
+
+enum CustomerRequestStatus {
+  NEW
+  UNDER_REVIEW
+  WAITING_FOR_CUSTOMER
+  FOLLOW_UP_REQUIRED
+  APPROVED
+  CANCELLED
+}
+
+enum FollowUpStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AudioProcessingStatus {
+  UPLOADED
+  TRANSCRIBING
+  TRANSCRIBED
+  FAILED
+}
+
+// ============================================================
+// AUTHENTICATION & USERS
+// ============================================================
 
 model User {
-  id           String   @id @default(cuid())
+  id           String  @id @default(cuid())
   fullName     String
-  username     String?  @unique
-  phone        String?  @unique
+  username     String? @unique
+  phone        String? @unique
   passwordHash String?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  isActive     Boolean @default(true)
 
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Authentication
+  sessions Session[]
+
+  // Role-based access control
   userRoles UserRole[]
+
+  // Audit history
   auditLogs AuditLog[]
+
+  // Customers
+  createdCustomers  Customer[] @relation("CustomerCreatedBy")
+  assignedCustomers Customer[] @relation("CustomerAssignedTo")
+
+  // Customer contacts
+  createdContacts CustomerContact[] @relation("ContactCreatedBy")
+
+  // Audio recordings
+  uploadedAudios AudioRecording[] @relation("AudioUploadedBy")
+
+  // Customer requests
+  createdRequests CustomerRequest[] @relation("RequestCreatedBy")
+
+  // Follow-ups
+  assignedFollowUps FollowUp[] @relation("FollowUpAssignedTo")
+  createdFollowUps  FollowUp[] @relation("FollowUpCreatedBy")
+
+  // Approval workflow
+  requestedApprovals ApprovalRequest[] @relation("ApprovalRequestedBy")
+  reviewedApprovals  ApprovalRequest[] @relation("ApprovalReviewedBy")
 
   @@index([isActive])
 }
 
+// ============================================================
+// ROLE-BASED ACCESS CONTROL
+// ============================================================
+
 model Role {
-  id          String   @id @default(cuid())
-  name        String   @unique
+  id          String  @id @default(cuid())
+  name        String  @unique
   title       String
   description String?
-  createdAt   DateTime @default(now())
+
+  createdAt DateTime @default(now())
 
   userRoles       UserRole[]
   rolePermissions RolePermission[]
 }
 
 model Permission {
-  id          String   @id @default(cuid())
-  code        String   @unique
+  id          String  @id @default(cuid())
+  code        String  @unique
   title       String
   description String?
 
@@ -55,6 +134,7 @@ model UserRole {
   assignedAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@id([userId, roleId])
@@ -65,39 +145,262 @@ model RolePermission {
   roleId       String
   permissionId String
 
-  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
   permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@id([roleId, permissionId])
   @@index([permissionId])
 }
 
-enum OtpPurpose {
-  LOGIN
+// ============================================================
+// SESSIONS
+// ============================================================
+
+model Session {
+  id         String   @id @default(cuid())
+  tokenHash  String   @unique
+  userId     String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
 }
 
+// ============================================================
+// OTP AUTHENTICATION
+// ============================================================
+
 model OtpCode {
-  id        String     @id @default(cuid())
-  phone     String
-  codeHash  String
-  purpose   OtpPurpose @default(LOGIN)
-  expiresAt DateTime
-  attempts  Int        @default(0)
+  id         String     @id @default(cuid())
+  phone      String
+  codeHash   String
+  purpose    OtpPurpose @default(LOGIN)
+  expiresAt  DateTime
+  attempts   Int        @default(0)
   consumedAt DateTime?
-  createdAt DateTime   @default(now())
+  createdAt  DateTime   @default(now())
 
   @@index([phone, purpose, createdAt])
   @@index([expiresAt])
 }
 
+model AuthAttempt {
+  id             String   @id @default(cuid())
+  identifierHash String
+  createdAt      DateTime @default(now())
+
+  @@index([identifierHash, createdAt])
+}
+
+// ============================================================
+// CUSTOMERS
+// ============================================================
+
+model Customer {
+  id           String  @id @default(cuid())
+  fullName     String
+  phone        String  @unique
+  province     String?
+  city         String?
+  customerType String?
+  description  String?
+  isActive     Boolean @default(true)
+
+  createdById  String?
+  assignedToId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdBy User? @relation("CustomerCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  assignedTo User? @relation("CustomerAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  contacts  CustomerContact[]
+  requests  CustomerRequest[]
+  followUps FollowUp[]
+
+  @@index([fullName])
+  @@index([assignedToId])
+  @@index([province, city])
+}
+
+// ============================================================
+// CUSTOMER CONTACT HISTORY
+// ============================================================
+
+model CustomerContact {
+  id         String      @id @default(cuid())
+  customerId String
+  type       ContactType @default(PHONE)
+
+  occurredAt DateTime @default(now())
+  summary    String?
+  notes      String?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  createdBy User? @relation("ContactCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  audioRecordings AudioRecording[]
+
+  @@index([customerId, occurredAt])
+  @@index([createdById, createdAt])
+}
+
+// ============================================================
+// AUDIO RECORDINGS & TRANSCRIPTS
+// ============================================================
+
+model AudioRecording {
+  id           String  @id @default(cuid())
+  contactId    String
+  uploadedById String?
+
+  storageKey   String
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+
+  processingStatus AudioProcessingStatus @default(UPLOADED)
+  transcript       String?
+  processingError  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contact CustomerContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  uploadedBy User? @relation("AudioUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([contactId, createdAt])
+  @@index([uploadedById])
+  @@index([processingStatus])
+}
+
+// ============================================================
+// CUSTOMER PURCHASE REQUESTS
+// ============================================================
+
+model CustomerRequest {
+  id          String  @id @default(cuid())
+  customerId  String
+  createdById String?
+
+  productName String
+  variety     String?
+
+  quantity Decimal? @db.Decimal(14, 2)
+  unit     String?
+
+  deliveryDate DateTime?
+
+  status CustomerRequestStatus @default(NEW)
+  notes  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  createdBy User? @relation("RequestCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  followUps FollowUp[]
+  approvals ApprovalRequest[]
+
+  @@index([customerId, createdAt])
+  @@index([status, createdAt])
+  @@index([createdById])
+}
+
+// ============================================================
+// FOLLOW-UPS
+// ============================================================
+
+model FollowUp {
+  id           String  @id @default(cuid())
+  customerId   String
+  requestId    String?
+  assignedToId String?
+  createdById  String?
+
+  dueAt       DateTime
+  completedAt DateTime?
+
+  status FollowUpStatus @default(PENDING)
+
+  result String?
+  notes  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  request CustomerRequest? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+
+  assignedTo User? @relation("FollowUpAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  createdBy User? @relation("FollowUpCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([assignedToId, status, dueAt])
+  @@index([customerId, dueAt])
+  @@index([requestId])
+}
+
+// ============================================================
+// APPROVAL WORKFLOW
+// ============================================================
+
+model ApprovalRequest {
+  id            String  @id @default(cuid())
+  requestId     String
+  requestedById String
+  reviewedById  String?
+
+  fieldName     String
+  proposedValue Json
+  reason        String?
+
+  status     ApprovalStatus @default(PENDING)
+  reviewNote String?
+  reviewedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  request CustomerRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  requestedBy User? @relation("ApprovalRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+
+  reviewedBy User? @relation("ApprovalReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([requestId])
+  @@index([requestedById])
+  @@index([reviewedById])
+}
+
+// ============================================================
+// AUDIT LOG
+// ============================================================
+
 model AuditLog {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   userId    String?
   action    String
   entity    String?
   entityId  String?
   metadata  Json?
   ipAddress String?
+
   createdAt DateTime @default(now())
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
