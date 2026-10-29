@@ -1,7 +1,11 @@
-
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type FormEvent,
+} from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -44,9 +48,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-type CustomerContact = {
+// --------------------------------------------------
+// Types
+// --------------------------------------------------
+
+type ContactType = "PHONE" | "IN_PERSON" | "OTHER";
+
+type Contact = {
   id: string;
-  type: "PHONE" | "IN_PERSON" | "OTHER";
+  type: ContactType;
   occurredAt: string;
   summary: string | null;
   notes: string | null;
@@ -63,11 +73,27 @@ type AudioRecording = {
   originalName: string;
   mimeType: string;
   sizeBytes: number;
-  processingStatus: "UPLOADED" | "TRANSCRIBING" | "TRANSCRIBED" | "FAILED";
+  processingStatus:
+    | "UPLOADED"
+    | "TRANSCRIBING"
+    | "TRANSCRIBED"
+    | "FAILED";
   transcript: string | null;
   processingError: string | null;
   createdAt: string;
 };
+
+type FollowUpStatus = "PENDING" | "COMPLETED" | "CANCELLED";
+
+type RequestStatus =
+  | "NEW"
+  | "UNDER_REVIEW"
+  | "WAITING_FOR_CUSTOMER"
+  | "FOLLOW_UP_REQUIRED"
+  | "APPROVED"
+  | "CANCELLED";
+
+type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
 
 type CustomerRequest = {
   id: string;
@@ -76,13 +102,7 @@ type CustomerRequest = {
   quantity: string | number | null;
   unit: string | null;
   deliveryDate: string | null;
-  status:
-    | "NEW"
-    | "UNDER_REVIEW"
-    | "WAITING_FOR_CUSTOMER"
-    | "FOLLOW_UP_REQUIRED"
-    | "APPROVED"
-    | "CANCELLED";
+  status: RequestStatus;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -94,7 +114,7 @@ type CustomerRequest = {
     id: string;
     dueAt: string;
     completedAt: string | null;
-    status: "PENDING" | "COMPLETED" | "CANCELLED";
+    status: FollowUpStatus;
     result: string | null;
     notes: string | null;
   }[];
@@ -103,7 +123,7 @@ type CustomerRequest = {
     fieldName: string;
     proposedValue: unknown;
     reason: string | null;
-    status: "PENDING" | "APPROVED" | "REJECTED";
+    status: ApprovalStatus;
     reviewNote: string | null;
     reviewedAt: string | null;
     createdAt: string;
@@ -114,7 +134,7 @@ type FollowUp = {
   id: string;
   dueAt: string;
   completedAt: string | null;
-  status: "PENDING" | "COMPLETED" | "CANCELLED";
+  status: FollowUpStatus;
   result: string | null;
   notes: string | null;
   createdAt: string;
@@ -147,7 +167,7 @@ type Customer = {
     id: string;
     fullName: string;
   } | null;
-  contacts: CustomerContact[];
+  contacts: Contact[];
   requests: CustomerRequest[];
   followUps: FollowUp[];
 };
@@ -160,6 +180,17 @@ type CustomerForm = {
   customerType: string;
   description: string;
 };
+
+type ContactForm = {
+  type: ContactType;
+  occurredAt: string;
+  summary: string;
+  notes: string;
+};
+
+// --------------------------------------------------
+// Helpers
+// --------------------------------------------------
 
 function normalizeDigits(value: string) {
   return value
@@ -202,7 +233,9 @@ function formatDateTime(value: string | null | undefined) {
 }
 
 function formatNumber(value: string | number | null | undefined) {
-  if (value === null || value === undefined || value === "") return "—";
+  if (value === null || value === undefined || value === "") {
+    return "—";
+  }
 
   const number = Number(value);
 
@@ -227,6 +260,46 @@ function formatFileSize(size: number) {
   })} مگابایت`;
 }
 
+function toDateTimeLocal(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "";
+
+  const pad = (number: number) => String(number).padStart(2, "0");
+
+  return [
+    date.getFullYear(),
+    "-",
+    pad(date.getMonth() + 1),
+    "-",
+    pad(date.getDate()),
+    "T",
+    pad(date.getHours()),
+    ":",
+    pad(date.getMinutes()),
+  ].join("");
+}
+
+function createEmptyContactForm(): ContactForm {
+  return {
+    type: "PHONE",
+    occurredAt: toDateTimeLocal(new Date().toISOString()),
+    summary: "",
+    notes: "",
+  };
+}
+
+function createCustomerForm(customer: Customer): CustomerForm {
+  return {
+    fullName: customer.fullName,
+    phone: customer.phone,
+    province: customer.province ?? "",
+    city: customer.city ?? "",
+    customerType: customer.customerType ?? "INDIVIDUAL",
+    description: customer.description ?? "",
+  };
+}
+
 function getCustomerTypeLabel(type: string | null) {
   switch (type) {
     case "INDIVIDUAL":
@@ -242,7 +315,7 @@ function getCustomerTypeLabel(type: string | null) {
   }
 }
 
-function getContactTypeLabel(type: CustomerContact["type"]) {
+function getContactTypeLabel(type: ContactType) {
   switch (type) {
     case "PHONE":
       return "تماس تلفنی";
@@ -250,12 +323,10 @@ function getContactTypeLabel(type: CustomerContact["type"]) {
       return "مراجعه حضوری";
     case "OTHER":
       return "سایر";
-    default:
-      return type;
   }
 }
 
-function getRequestStatusLabel(status: CustomerRequest["status"]) {
+function getRequestStatusLabel(status: RequestStatus) {
   switch (status) {
     case "NEW":
       return "جدید";
@@ -269,12 +340,10 @@ function getRequestStatusLabel(status: CustomerRequest["status"]) {
       return "تأیید شده";
     case "CANCELLED":
       return "لغو شده";
-    default:
-      return status;
   }
 }
 
-function getFollowUpStatusLabel(status: FollowUp["status"]) {
+function getFollowUpStatusLabel(status: FollowUpStatus) {
   switch (status) {
     case "PENDING":
       return "در انتظار";
@@ -282,8 +351,6 @@ function getFollowUpStatusLabel(status: FollowUp["status"]) {
       return "انجام شده";
     case "CANCELLED":
       return "لغو شده";
-    default:
-      return status;
   }
 }
 
@@ -297,12 +364,10 @@ function getAudioStatusLabel(status: AudioRecording["processingStatus"]) {
       return "تبدیل به متن انجام شده";
     case "FAILED":
       return "پردازش ناموفق";
-    default:
-      return status;
   }
 }
 
-function getApprovalStatusLabel(status: CustomerRequest["approvals"][number]["status"]) {
+function getApprovalStatusLabel(status: ApprovalStatus) {
   switch (status) {
     case "PENDING":
       return "در انتظار بررسی";
@@ -310,8 +375,6 @@ function getApprovalStatusLabel(status: CustomerRequest["approvals"][number]["st
       return "تأیید شده";
     case "REJECTED":
       return "رد شده";
-    default:
-      return status;
   }
 }
 
@@ -323,20 +386,40 @@ function getStatusVariant(
     case "COMPLETED":
     case "TRANSCRIBED":
       return "default";
+
     case "CANCELLED":
     case "REJECTED":
     case "FAILED":
       return "destructive";
+
     case "PENDING":
     case "NEW":
     case "UPLOADED":
     case "UNDER_REVIEW":
     case "TRANSCRIBING":
       return "secondary";
+
     default:
       return "outline";
   }
 }
+
+function getErrorMessage(data: unknown, fallback: string) {
+  if (
+    data &&
+    typeof data === "object" &&
+    "message" in data &&
+    typeof data.message === "string"
+  ) {
+    return data.message;
+  }
+
+  return fallback;
+}
+
+// --------------------------------------------------
+// Reusable UI
+// --------------------------------------------------
 
 function ErrorMessage({ message }: { message: string }) {
   return (
@@ -366,6 +449,36 @@ function EmptyState({
   );
 }
 
+function StatCard({
+  title,
+  value,
+  icon,
+}: {
+  title: string;
+  value: number;
+  icon: React.ReactNode;
+}) {
+  return (
+    <Card>
+      <CardContent className="flex items-center gap-3 p-4">
+        <div className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          {icon}
+        </div>
+        <div>
+          <p className="text-sm text-muted-foreground">{title}</p>
+          <p className="text-xl font-bold">
+            {value.toLocaleString("fa-IR")}
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// --------------------------------------------------
+// Page
+// --------------------------------------------------
+
 export default function CustomerDetailsPage() {
   const params = useParams<{ id: string }>();
   const customerId = params.id;
@@ -377,101 +490,136 @@ export default function CustomerDetailsPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  const [contactForm, setContactForm] = useState<ContactForm>(
+    createEmptyContactForm,
+  );
+  const [isSavingContact, setIsSavingContact] = useState(false);
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [contactError, setContactError] = useState("");
+  const [contactSuccess, setContactSuccess] = useState("");
 
-  const loadCustomer = useCallback(async () => {
-    if (!customerId) return;
+  // ------------------------------------------------
+  // Load customer
+  // ------------------------------------------------
 
-    setIsLoading(true);
-    setError("");
+  const loadCustomer = useCallback(
+    async (signal?: AbortSignal) => {
+      if (!customerId) {
+        throw new Error("شناسه مشتری معتبر نیست.");
+      }
 
-    try {
       const response = await fetch(
         `/api/customer/${encodeURIComponent(customerId)}`,
         {
           method: "GET",
           credentials: "same-origin",
           cache: "no-store",
+          signal,
         },
       );
 
-      const data = await response.json();
+      const data: unknown = await response.json();
 
       if (!response.ok) {
         throw new Error(
-          data.message || "دریافت اطلاعات مشتری ناموفق بود.",
+          getErrorMessage(
+            data,
+            "دریافت اطلاعات مشتری ناموفق بود.",
+          ),
         );
       }
 
-      const result = data as { customer: Customer };
-      const currentCustomer = result.customer;
+      if (
+        !data ||
+        typeof data !== "object" ||
+        !("customer" in data) ||
+        !data.customer
+      ) {
+        throw new Error("اطلاعات مشتری در پاسخ سرور وجود ندارد.");
+      }
+
+      const currentCustomer = data.customer as Customer;
 
       setCustomer(currentCustomer);
+      setForm(createCustomerForm(currentCustomer));
 
-      setForm({
-        fullName: currentCustomer.fullName,
-        phone: currentCustomer.phone,
-        province: currentCustomer.province ?? "",
-        city: currentCustomer.city ?? "",
-        customerType: currentCustomer.customerType ?? "INDIVIDUAL",
-        description: currentCustomer.description ?? "",
-      });
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "خطا در دریافت اطلاعات مشتری.",
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [customerId]);
+      return currentCustomer;
+    },
+    [customerId],
+  );
 
   useEffect(() => {
-  const controller = new AbortController();
-  let active = true;
+    const controller = new AbortController();
+    let active = true;
 
-  async function fetchCustomer() {
-    try {
-      const response = await fetch(`/api/customer/${customerId}`, {
-        signal: controller.signal,
-      });
+    async function fetchCustomer() {
+      try {
+        const response = await fetch(
+          `/api/customer/${encodeURIComponent(customerId)}`,
+          {
+            method: "GET",
+            credentials: "same-origin",
+            cache: "no-store",
+            signal: controller.signal,
+          },
+        );
 
-      const data = await response.json();
+        const data: unknown = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.message || "خطا در دریافت اطلاعات مشتری");
-      }
+        if (!response.ok) {
+          throw new Error(
+            getErrorMessage(
+              data,
+              "دریافت اطلاعات مشتری ناموفق بود.",
+            ),
+          );
+        }
 
-      if (!active) return;
+        if (
+          !data ||
+          typeof data !== "object" ||
+          !("customer" in data) ||
+          !data.customer
+        ) {
+          throw new Error("اطلاعات مشتری در پاسخ سرور وجود ندارد.");
+        }
 
-      // اینجا اطلاعات مشتری را در state قرار بده.
-      // برای مثال:
-      // setCustomer(data.customer);
-      // setForm(...);
-    } catch (error) {
-      if (!active || controller.signal.aborted) return;
+        if (!active) return;
 
-      setError(
-        error instanceof Error
-          ? error.message
-          : "خطا در دریافت اطلاعات مشتری"
-      );
-    } finally {
-      if (active) {
-        setIsLoading(false);
+        const currentCustomer = data.customer as Customer;
+
+        setCustomer(currentCustomer);
+        setForm(createCustomerForm(currentCustomer));
+        setError("");
+      } catch (err) {
+        if (!active || controller.signal.aborted) return;
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : "خطا در دریافت اطلاعات مشتری.",
+        );
+      } finally {
+        if (active) {
+          setIsLoading(false);
+        }
       }
     }
-  }
 
-  void fetchCustomer();
+    void fetchCustomer();
 
-  return () => {
-    active = false;
-    controller.abort();
-  };
-}, [customerId]);
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [customerId]);
+
+  // ------------------------------------------------
+  // Form helpers
+  // ------------------------------------------------
+
   function updateForm<K extends keyof CustomerForm>(
     key: K,
     value: CustomerForm[K],
@@ -486,27 +634,34 @@ export default function CustomerDetailsPage() {
     );
   }
 
-  function cancelEditing() {
-    if (!customer) return;
+  function updateContactForm<K extends keyof ContactForm>(
+    key: K,
+    value: ContactForm[K],
+  ) {
+    setContactForm((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }
 
-    setForm({
-      fullName: customer.fullName,
-      phone: customer.phone,
-      province: customer.province ?? "",
-      city: customer.city ?? "",
-      customerType: customer.customerType ?? "INDIVIDUAL",
-      description: customer.description ?? "",
-    });
+  function cancelEditing() {
+    if (customer) {
+      setForm(createCustomerForm(customer));
+    }
 
     setIsEditing(false);
     setError("");
     setSuccess("");
   }
 
+  // ------------------------------------------------
+  // Save customer
+  // ------------------------------------------------
+
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!customer || !form) return;
+    if (!customer || !form || isSaving) return;
 
     setError("");
     setSuccess("");
@@ -546,28 +701,23 @@ export default function CustomerDetailsPage() {
         },
       );
 
-      const data = await response.json();
+      const data: unknown = await response.json();
 
       if (!response.ok) {
-        const validationErrors = data.errors as
-          | Record<string, string[] | undefined>
-          | undefined;
-
-        const firstValidationError = validationErrors
-          ? Object.values(validationErrors).flat().find(Boolean)
-          : undefined;
-
         throw new Error(
-          firstValidationError ||
-            data.message ||
+          getErrorMessage(
+            data,
             "ذخیره اطلاعات مشتری ناموفق بود.",
+          ),
         );
       }
 
-      setSuccess(data.message || "اطلاعات مشتری ذخیره شد.");
-      setIsEditing(false);
-
       await loadCustomer();
+
+      setIsEditing(false);
+      setSuccess(
+        getErrorMessage(data, "اطلاعات مشتری با موفقیت ذخیره شد."),
+      );
     } catch (err) {
       setError(
         err instanceof Error
@@ -579,12 +729,97 @@ export default function CustomerDetailsPage() {
     }
   }
 
+  // ------------------------------------------------
+  // Save contact history
+  // ------------------------------------------------
+
+  async function handleSaveContact(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+
+    if (!customer || isSavingContact) return;
+
+    setContactError("");
+    setContactSuccess("");
+
+    if (!contactForm.summary.trim()) {
+      setContactError("خلاصه تماس را وارد کنید.");
+      return;
+    }
+
+    if (!contactForm.occurredAt) {
+      setContactError("تاریخ و ساعت تماس را وارد کنید.");
+      return;
+    }
+
+    const occurredAt = new Date(contactForm.occurredAt);
+
+    if (Number.isNaN(occurredAt.getTime())) {
+      setContactError("تاریخ و ساعت تماس معتبر نیست.");
+      return;
+    }
+
+    setIsSavingContact(true);
+
+    try {
+      const response = await fetch(
+        `/api/customer/${encodeURIComponent(customer.id)}/contacts`,
+        {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            type: contactForm.type,
+            occurredAt: occurredAt.toISOString(),
+            summary: contactForm.summary.trim(),
+            notes: contactForm.notes.trim() || null,
+          }),
+        },
+      );
+
+      const data: unknown = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          getErrorMessage(
+            data,
+            "ثبت سابقه تماس ناموفق بود.",
+          ),
+        );
+      }
+
+      setContactForm(createEmptyContactForm());
+
+      await loadCustomer();
+
+      setContactSuccess(
+        getErrorMessage(data, "سابقه تماس ثبت شد."),
+      );
+    } catch (err) {
+      setContactError(
+        err instanceof Error
+          ? err.message
+          : "خطا در ثبت سابقه تماس.",
+      );
+    } finally {
+      setIsSavingContact(false);
+    }
+  }
+
+  // ------------------------------------------------
+  // Loading state
+  // ------------------------------------------------
+
   if (isLoading) {
     return (
       <main dir="rtl" className="min-h-screen bg-muted/30 p-4 sm:p-8">
         <div className="mx-auto max-w-7xl space-y-5">
           <div className="h-8 w-48 animate-pulse rounded bg-muted" />
           <div className="h-40 animate-pulse rounded-xl bg-muted" />
+
           <div className="grid gap-5 lg:grid-cols-2">
             <div className="h-64 animate-pulse rounded-xl bg-muted" />
             <div className="h-64 animate-pulse rounded-xl bg-muted" />
@@ -593,6 +828,10 @@ export default function CustomerDetailsPage() {
       </main>
     );
   }
+
+  // ------------------------------------------------
+  // Not found / error
+  // ------------------------------------------------
 
   if (!customer || !form) {
     return (
@@ -611,8 +850,23 @@ export default function CustomerDetailsPage() {
 
           <Button
             variant="outline"
-            onClick={() => void loadCustomer()}
             className="gap-2"
+            onClick={async () => {
+              setIsLoading(true);
+              setError("");
+
+              try {
+                await loadCustomer();
+              } catch (err) {
+                setError(
+                  err instanceof Error
+                    ? err.message
+                    : "دریافت اطلاعات مشتری ناموفق بود.",
+                );
+              } finally {
+                setIsLoading(false);
+              }
+            }}
           >
             <RefreshCw className="size-4" />
             تلاش دوباره
@@ -622,8 +876,13 @@ export default function CustomerDetailsPage() {
     );
   }
 
+  // ------------------------------------------------
+  // Derived statistics
+  // ------------------------------------------------
+
   const totalAudioCount = customer.contacts.reduce(
-    (total, contact) => total + contact.audioRecordings.length,
+    (total, contact) =>
+      total + contact.audioRecordings.length,
     0,
   );
 
@@ -631,26 +890,39 @@ export default function CustomerDetailsPage() {
     (followUp) => followUp.status === "PENDING",
   ).length;
 
+  // ------------------------------------------------
+  // Render
+  // ------------------------------------------------
+
   return (
     <main dir="rtl" className="min-h-screen bg-muted/30">
       <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
-        {/* مسیر صفحه */}
+        {/* Breadcrumb */}
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-          <Link href="/admin" className="transition-colors hover:text-foreground">
+          <Link
+            href="/admin"
+            className="transition-colors hover:text-foreground"
+          >
             پنل مدیریت
           </Link>
+
           <span>/</span>
+
           <Link
             href="/customers"
             className="transition-colors hover:text-foreground"
           >
             مشتریان
           </Link>
+
           <span>/</span>
-          <span className="text-foreground">{customer.fullName}</span>
+
+          <span className="text-foreground">
+            {customer.fullName}
+          </span>
         </div>
 
-        {/* پیام‌ها */}
+        {/* Global messages */}
         {error && <ErrorMessage message={error} />}
 
         {success && (
@@ -663,7 +935,7 @@ export default function CustomerDetailsPage() {
           </div>
         )}
 
-        {/* سربرگ مشتری */}
+        {/* Customer header */}
         <Card>
           <CardContent className="p-5 sm:p-7">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
@@ -681,7 +953,9 @@ export default function CustomerDetailsPage() {
                     <Badge
                       variant={customer.isActive ? "default" : "outline"}
                     >
-                      {customer.isActive ? "مشتری فعال" : "مشتری غیرفعال"}
+                      {customer.isActive
+                        ? "مشتری فعال"
+                        : "مشتری غیرفعال"}
                     </Badge>
 
                     <Badge variant="secondary">
@@ -720,12 +994,12 @@ export default function CustomerDetailsPage() {
 
                 {!isEditing && (
                   <Button
+                    className="gap-2"
                     onClick={() => {
                       setError("");
                       setSuccess("");
                       setIsEditing(true);
                     }}
-                    className="gap-2"
                   >
                     <Pencil className="size-4" />
                     ویرایش اطلاعات
@@ -736,72 +1010,40 @@ export default function CustomerDetailsPage() {
           </CardContent>
         </Card>
 
-        {/* آمار سریع */}
+        {/* Statistics */}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <Phone className="size-5" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">سوابق تماس</p>
-                <p className="text-xl font-bold">
-                  {customer.contacts.length.toLocaleString("fa-IR")}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+          <StatCard
+            title="سوابق تماس"
+            value={customer.contacts.length}
+            icon={<Phone className="size-5" />}
+          />
 
-          <Card>
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <ShoppingBasket className="size-5" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">درخواست‌های خرید</p>
-                <p className="text-xl font-bold">
-                  {customer.requests.length.toLocaleString("fa-IR")}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+          <StatCard
+            title="درخواست‌های خرید"
+            value={customer.requests.length}
+            icon={<ShoppingBasket className="size-5" />}
+          />
 
-          <Card>
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex size-11 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600">
-                <Clock3 className="size-5" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">پیگیری‌های باز</p>
-                <p className="text-xl font-bold">
-                  {pendingFollowUps.toLocaleString("fa-IR")}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+          <StatCard
+            title="پیگیری‌های باز"
+            value={pendingFollowUps}
+            icon={<Clock3 className="size-5" />}
+          />
 
-          <Card>
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <FileAudio className="size-5" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">فایل‌های صوتی</p>
-                <p className="text-xl font-bold">
-                  {totalAudioCount.toLocaleString("fa-IR")}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+          <StatCard
+            title="فایل‌های صوتی"
+            value={totalAudioCount}
+            icon={<FileAudio className="size-5" />}
+          />
         </div>
 
-        {/* فرم ویرایش */}
+        {/* Edit customer */}
         {isEditing && (
           <Card>
             <CardHeader>
               <CardTitle>ویرایش اطلاعات مشتری</CardTitle>
               <CardDescription>
-                اطلاعات اصلی مشتری را تغییر بده و ذخیره کن.
+                اطلاعات اصلی مشتری را اصلاح و ذخیره کنید.
               </CardDescription>
             </CardHeader>
 
@@ -809,16 +1051,15 @@ export default function CustomerDetailsPage() {
               <form onSubmit={handleSave} className="space-y-5">
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   <div className="space-y-2">
-                    <Label htmlFor="fullName">نام و نام خانوادگی *</Label>
+                    <Label htmlFor="fullName">نام مشتری *</Label>
                     <Input
                       id="fullName"
                       value={form.fullName}
                       onChange={(event) =>
                         updateForm("fullName", event.target.value)
                       }
-                      required
                       maxLength={150}
-                      autoComplete="name"
+                      required
                     />
                   </div>
 
@@ -826,16 +1067,13 @@ export default function CustomerDetailsPage() {
                     <Label htmlFor="phone">شماره موبایل *</Label>
                     <Input
                       id="phone"
-                      type="tel"
-                      inputMode="numeric"
                       dir="ltr"
-                      className="text-left"
+                      inputMode="numeric"
                       value={form.phone}
                       onChange={(event) =>
                         updateForm("phone", event.target.value)
                       }
                       maxLength={15}
-                      autoComplete="tel"
                       required
                     />
                   </div>
@@ -848,7 +1086,7 @@ export default function CustomerDetailsPage() {
                       onChange={(event) =>
                         updateForm("customerType", event.target.value)
                       }
-                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <option value="INDIVIDUAL">حقیقی</option>
                       <option value="COMPANY">حقوقی</option>
@@ -907,13 +1145,19 @@ export default function CustomerDetailsPage() {
                     انصراف
                   </Button>
 
-                  <Button type="submit" disabled={isSaving} className="gap-2">
+                  <Button
+                    type="submit"
+                    disabled={isSaving}
+                    className="gap-2"
+                  >
                     {isSaving ? (
                       <LoaderCircle className="size-4 animate-spin" />
                     ) : (
                       <Save className="size-4" />
                     )}
-                    {isSaving ? "در حال ذخیره..." : "ذخیره تغییرات"}
+                    {isSaving
+                      ? "در حال ذخیره..."
+                      : "ذخیره تغییرات"}
                   </Button>
                 </div>
               </form>
@@ -921,7 +1165,7 @@ export default function CustomerDetailsPage() {
           </Card>
         )}
 
-        {/* اطلاعات تکمیلی */}
+        {/* Customer metadata */}
         <Card>
           <CardHeader>
             <CardTitle>اطلاعات تکمیلی</CardTitle>
@@ -933,28 +1177,36 @@ export default function CustomerDetailsPage() {
           <CardContent>
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">ثبت‌کننده</p>
+                <p className="text-sm text-muted-foreground">
+                  ثبت‌کننده
+                </p>
                 <p className="font-medium">
                   {customer.createdBy?.fullName || "مشخص نشده"}
                 </p>
               </div>
 
               <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">کارشناس مسئول</p>
+                <p className="text-sm text-muted-foreground">
+                  کارشناس مسئول
+                </p>
                 <p className="font-medium">
                   {customer.assignedTo?.fullName || "تعیین نشده"}
                 </p>
               </div>
 
               <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">آخرین به‌روزرسانی</p>
+                <p className="text-sm text-muted-foreground">
+                  آخرین به‌روزرسانی
+                </p>
                 <p className="font-medium">
                   {formatDateTime(customer.updatedAt)}
                 </p>
               </div>
 
               <div className="space-y-1 sm:col-span-2 lg:col-span-3">
-                <p className="text-sm text-muted-foreground">توضیحات</p>
+                <p className="text-sm text-muted-foreground">
+                  توضیحات
+                </p>
                 <p className="whitespace-pre-wrap leading-7">
                   {customer.description || "توضیحی ثبت نشده است."}
                 </p>
@@ -963,7 +1215,135 @@ export default function CustomerDetailsPage() {
           </CardContent>
         </Card>
 
-        {/* سوابق تماس */}
+        {/* Create contact */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Phone className="size-5" />
+              ثبت سابقه تماس
+            </CardTitle>
+
+            <CardDescription>
+              نتیجه تماس یا مراجعه مشتری را ثبت کنید.
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent>
+            <form onSubmit={handleSaveContact} className="space-y-4">
+              {contactError && (
+                <ErrorMessage message={contactError} />
+              )}
+
+              {contactSuccess && (
+                <div
+                  role="status"
+                  className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"
+                >
+                  <CheckCircle2 className="size-5 shrink-0" />
+                  {contactSuccess}
+                </div>
+              )}
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="contactType">نوع تماس *</Label>
+                  <select
+                    id="contactType"
+                    value={contactForm.type}
+                    onChange={(event) =>
+                      updateContactForm(
+                        "type",
+                        event.target.value as ContactType,
+                      )
+                    }
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <option value="PHONE">تماس تلفنی</option>
+                    <option value="IN_PERSON">مراجعه حضوری</option>
+                    <option value="OTHER">سایر</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="occurredAt">
+                    تاریخ و ساعت تماس *
+                  </Label>
+                  <Input
+                    id="occurredAt"
+                    type="datetime-local"
+                    value={contactForm.occurredAt}
+                    onChange={(event) =>
+                      updateContactForm(
+                        "occurredAt",
+                        event.target.value,
+                      )
+                    }
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="contactSummary">
+                    خلاصه تماس *
+                  </Label>
+                  <Input
+                    id="contactSummary"
+                    value={contactForm.summary}
+                    onChange={(event) =>
+                      updateContactForm("summary", event.target.value)
+                    }
+                    placeholder="مثلاً هماهنگی تحویل نشاء گوجه‌فرنگی"
+                    maxLength={500}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="contactNotes">
+                    توضیحات تکمیلی
+                  </Label>
+                  <Textarea
+                    id="contactNotes"
+                    value={contactForm.notes}
+                    onChange={(event) =>
+                      updateContactForm("notes", event.target.value)
+                    }
+                    placeholder="نتیجه مکالمه، نیاز مشتری یا اقدام بعدی..."
+                    maxLength={5000}
+                    rows={3}
+                    className="resize-y"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end border-t pt-4">
+                <Button
+                  type="submit"
+                  disabled={isSavingContact || !customer.isActive}
+                  className="gap-2"
+                >
+                  {isSavingContact ? (
+                    <LoaderCircle className="size-4 animate-spin" />
+                  ) : (
+                    <Save className="size-4" />
+                  )}
+
+                  {isSavingContact
+                    ? "در حال ثبت..."
+                    : "ثبت سابقه تماس"}
+                </Button>
+              </div>
+
+              {!customer.isActive && (
+                <p className="text-sm text-muted-foreground">
+                  مشتری غیرفعال است؛ ثبت سابقه تماس برای او امکان‌پذیر نیست.
+                </p>
+              )}
+            </form>
+          </CardContent>
+        </Card>
+
+        {/* Contact history */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -971,7 +1351,7 @@ export default function CustomerDetailsPage() {
               تاریخچه تماس‌ها
             </CardTitle>
             <CardDescription>
-              تماس‌های تلفنی، مراجعات حضوری و یادداشت‌های ثبت‌شده
+              تماس‌های تلفنی، مراجعات حضوری و فایل‌های صوتی مرتبط
             </CardDescription>
           </CardHeader>
 
@@ -979,7 +1359,7 @@ export default function CustomerDetailsPage() {
             {customer.contacts.length === 0 ? (
               <EmptyState
                 title="هنوز سابقه تماسی ثبت نشده"
-                description="سوابق تماس این مشتری در این بخش نمایش داده خواهند شد."
+                description="پس از ثبت تماس، اطلاعات آن در این بخش نمایش داده می‌شود."
               />
             ) : (
               <div className="space-y-4">
@@ -994,6 +1374,7 @@ export default function CustomerDetailsPage() {
                           <Badge variant="secondary">
                             {getContactTypeLabel(contact.type)}
                           </Badge>
+
                           <span className="text-sm text-muted-foreground">
                             {formatDateTime(contact.occurredAt)}
                           </span>
@@ -1005,7 +1386,8 @@ export default function CustomerDetailsPage() {
                       </div>
 
                       <p className="text-xs text-muted-foreground">
-                        ثبت‌کننده: {contact.createdBy?.fullName || "نامشخص"}
+                        ثبت‌کننده:{" "}
+                        {contact.createdBy?.fullName || "نامشخص"}
                       </p>
                     </div>
 
@@ -1030,10 +1412,12 @@ export default function CustomerDetailsPage() {
                             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                               <div className="flex min-w-0 items-center gap-3">
                                 <FileAudio className="size-5 shrink-0 text-muted-foreground" />
+
                                 <div className="min-w-0">
                                   <p className="break-all text-sm font-medium">
                                     {audio.originalName}
                                   </p>
+
                                   <p className="text-xs text-muted-foreground">
                                     {formatFileSize(audio.sizeBytes)}
                                     {" · "}
@@ -1047,7 +1431,9 @@ export default function CustomerDetailsPage() {
                                   audio.processingStatus,
                                 )}
                               >
-                                {getAudioStatusLabel(audio.processingStatus)}
+                                {getAudioStatusLabel(
+                                  audio.processingStatus,
+                                )}
                               </Badge>
                             </div>
 
@@ -1056,6 +1442,7 @@ export default function CustomerDetailsPage() {
                                 <p className="text-sm font-semibold">
                                   متن استخراج‌شده
                                 </p>
+
                                 <p className="whitespace-pre-wrap text-sm leading-7">
                                   {audio.transcript}
                                 </p>
@@ -1078,7 +1465,7 @@ export default function CustomerDetailsPage() {
           </CardContent>
         </Card>
 
-        {/* درخواست‌های خرید */}
+        {/* Purchase requests */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -1099,7 +1486,10 @@ export default function CustomerDetailsPage() {
             ) : (
               <div className="space-y-4">
                 {customer.requests.map((request) => (
-                  <div key={request.id} className="space-y-4 rounded-xl border p-4">
+                  <div
+                    key={request.id}
+                    className="space-y-4 rounded-xl border p-4"
+                  >
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="space-y-2">
                         <h3 className="text-base font-semibold">
@@ -1120,7 +1510,9 @@ export default function CustomerDetailsPage() {
 
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                       <div>
-                        <p className="text-sm text-muted-foreground">مقدار</p>
+                        <p className="text-sm text-muted-foreground">
+                          مقدار
+                        </p>
                         <p className="mt-1 font-medium">
                           {formatNumber(request.quantity)}
                           {request.unit ? ` ${request.unit}` : ""}
@@ -1137,14 +1529,18 @@ export default function CustomerDetailsPage() {
                       </div>
 
                       <div>
-                        <p className="text-sm text-muted-foreground">تاریخ ثبت</p>
+                        <p className="text-sm text-muted-foreground">
+                          تاریخ ثبت
+                        </p>
                         <p className="mt-1 font-medium">
                           {formatDate(request.createdAt)}
                         </p>
                       </div>
 
                       <div>
-                        <p className="text-sm text-muted-foreground">ثبت‌کننده</p>
+                        <p className="text-sm text-muted-foreground">
+                          ثبت‌کننده
+                        </p>
                         <p className="mt-1 font-medium">
                           {request.createdBy?.fullName || "نامشخص"}
                         </p>
@@ -1153,7 +1549,9 @@ export default function CustomerDetailsPage() {
 
                     {request.notes && (
                       <div className="rounded-lg bg-muted/40 p-3">
-                        <p className="mb-1 text-sm font-medium">توضیحات</p>
+                        <p className="mb-1 text-sm font-medium">
+                          توضیحات
+                        </p>
                         <p className="whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
                           {request.notes}
                         </p>
@@ -1175,11 +1573,13 @@ export default function CustomerDetailsPage() {
                               <p className="text-sm font-medium">
                                 فیلد: {approval.fieldName}
                               </p>
+
                               {approval.reason && (
                                 <p className="mt-1 text-sm text-muted-foreground">
                                   دلیل: {approval.reason}
                                 </p>
                               )}
+
                               {approval.reviewNote && (
                                 <p className="mt-1 text-sm text-muted-foreground">
                                   توضیح بررسی: {approval.reviewNote}
@@ -1187,7 +1587,9 @@ export default function CustomerDetailsPage() {
                               )}
                             </div>
 
-                            <Badge variant={getStatusVariant(approval.status)}>
+                            <Badge
+                              variant={getStatusVariant(approval.status)}
+                            >
                               {getApprovalStatusLabel(approval.status)}
                             </Badge>
                           </div>
@@ -1224,7 +1626,9 @@ export default function CustomerDetailsPage() {
                               )}
                             </div>
 
-                            <Badge variant={getStatusVariant(followUp.status)}>
+                            <Badge
+                              variant={getStatusVariant(followUp.status)}
+                            >
                               {getFollowUpStatusLabel(followUp.status)}
                             </Badge>
                           </div>
@@ -1238,7 +1642,7 @@ export default function CustomerDetailsPage() {
           </CardContent>
         </Card>
 
-        {/* پیگیری‌های مشتری */}
+        {/* Follow-ups */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -1246,7 +1650,7 @@ export default function CustomerDetailsPage() {
               پیگیری‌های مشتری
             </CardTitle>
             <CardDescription>
-              برنامه پیگیری، موعد انجام و نتیجه پیگیری‌ها
+              موعد انجام، مسئول پیگیری و نتیجه پیگیری‌ها
             </CardDescription>
           </CardHeader>
 
@@ -1254,18 +1658,28 @@ export default function CustomerDetailsPage() {
             {customer.followUps.length === 0 ? (
               <EmptyState
                 title="پیگیری‌ای ثبت نشده"
-                description="پیگیری‌های مستقل یا مرتبط با درخواست‌ها در این بخش نمایش داده می‌شوند."
+                description="پیگیری‌های مشتری در این بخش نمایش داده می‌شوند."
               />
             ) : (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="text-right">موعد پیگیری</TableHead>
-                      <TableHead className="text-right">درخواست مرتبط</TableHead>
-                      <TableHead className="text-right">مسئول</TableHead>
-                      <TableHead className="text-right">وضعیت</TableHead>
-                      <TableHead className="text-right">نتیجه</TableHead>
+                      <TableHead className="text-right">
+                        موعد پیگیری
+                      </TableHead>
+                      <TableHead className="text-right">
+                        درخواست مرتبط
+                      </TableHead>
+                      <TableHead className="text-right">
+                        مسئول
+                      </TableHead>
+                      <TableHead className="text-right">
+                        وضعیت
+                      </TableHead>
+                      <TableHead className="text-right">
+                        نتیجه
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
 
@@ -1277,15 +1691,19 @@ export default function CustomerDetailsPage() {
                         </TableCell>
 
                         <TableCell>
-                          {followUp.request?.productName || "پیگیری عمومی"}
+                          {followUp.request?.productName ||
+                            "پیگیری عمومی"}
                         </TableCell>
 
                         <TableCell>
-                          {followUp.assignedTo?.fullName || "تعیین نشده"}
+                          {followUp.assignedTo?.fullName ||
+                            "تعیین نشده"}
                         </TableCell>
 
                         <TableCell>
-                          <Badge variant={getStatusVariant(followUp.status)}>
+                          <Badge
+                            variant={getStatusVariant(followUp.status)}
+                          >
                             {getFollowUpStatusLabel(followUp.status)}
                           </Badge>
                         </TableCell>
@@ -1312,7 +1730,7 @@ export default function CustomerDetailsPage() {
           </CardContent>
         </Card>
 
-        {/* دکمه‌های انتهای صفحه */}
+        {/* Footer actions */}
         <div className="flex flex-wrap justify-between gap-3 border-t pt-4">
           <Button variant="outline">
             <Link href="/customers">
@@ -1323,9 +1741,23 @@ export default function CustomerDetailsPage() {
 
           <Button
             variant="outline"
-            onClick={() => void loadCustomer()}
-            disabled={isLoading || isSaving}
+            disabled={isSaving || isSavingContact}
             className="gap-2"
+            onClick={async () => {
+              setError("");
+              setSuccess("");
+
+              try {
+                await loadCustomer();
+                setSuccess("اطلاعات مشتری به‌روزرسانی شد.");
+              } catch (err) {
+                setError(
+                  err instanceof Error
+                    ? err.message
+                    : "به‌روزرسانی اطلاعات ناموفق بود.",
+                );
+              }
+            }}
           >
             <RefreshCw className="size-4" />
             به‌روزرسانی اطلاعات
@@ -1335,3 +1767,4 @@ export default function CustomerDetailsPage() {
     </main>
   );
 }
+
