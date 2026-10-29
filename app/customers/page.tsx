@@ -74,12 +74,8 @@ const initialForm: CustomerForm = {
 
 function normalizeDigits(value: string) {
   return value
-    .replace(/[۰-۹]/g, (digit) =>
-      String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)),
-    )
-    .replace(/[٠-٩]/g, (digit) =>
-      String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)),
-    );
+    .replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)))
+    .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)));
 }
 
 function getCustomerTypeLabel(type: string | null) {
@@ -143,14 +139,11 @@ export default function CustomersPage() {
           params.set("q", query.trim());
         }
 
-        const response = await fetch(
-          `/api/customers?${params.toString()}`,
-          {
-            method: "GET",
-            credentials: "same-origin",
-            cache: "no-store",
-          },
-        );
+        const response = await fetch(`/api/customer?${params.toString()}`, {
+          method: "GET",
+          credentials: "same-origin",
+          cache: "no-store",
+        });
 
         const data = await response.json();
 
@@ -160,16 +153,22 @@ export default function CustomersPage() {
           );
         }
 
-        const result = data as CustomersResponse;
+        const result = data as {
+          customers: Customer[];
+          pagination: {
+            page: number;
+            pageSize: number;
+            total: number;
+            totalPages: number;
+          };
+        };
 
         setCustomers(result.customers ?? []);
-        setTotal(result.total ?? 0);
-        setTotalPages(Math.max(1, result.totalPages ?? 1));
+        setTotal(result.pagination?.total ?? 0);
+        setTotalPages(Math.max(1, result.pagination?.totalPages ?? 1));
       } catch (err) {
         setError(
-          err instanceof Error
-            ? err.message
-            : "خطا در دریافت اطلاعات مشتریان.",
+          err instanceof Error ? err.message : "خطا در دریافت اطلاعات مشتریان.",
         );
       } finally {
         setIsLoading(false);
@@ -179,9 +178,12 @@ export default function CustomersPage() {
   );
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      void loadCustomers(search, page);
-    }, search.trim() ? 350 : 0);
+    const timeout = window.setTimeout(
+      () => {
+        void loadCustomers(search, page);
+      },
+      search.trim() ? 350 : 0,
+    );
 
     return () => window.clearTimeout(timeout);
   }, [loadCustomers, search, page]);
@@ -217,7 +219,7 @@ export default function CustomersPage() {
     setIsSaving(true);
 
     try {
-      const response = await fetch("/api/customers", {
+      const response = await fetch("/api/customer", {
         method: "POST",
         credentials: "same-origin",
         headers: {
@@ -236,9 +238,7 @@ export default function CustomersPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data.error || data.message || "ثبت مشتری ناموفق بود.",
-        );
+        throw new Error(data.error || data.message || "ثبت مشتری ناموفق بود.");
       }
 
       setForm(initialForm);
@@ -249,9 +249,7 @@ export default function CustomersPage() {
 
       await loadCustomers("", 1);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "خطا در ثبت مشتری.",
-      );
+      setError(err instanceof Error ? err.message : "خطا در ثبت مشتری.");
     } finally {
       setIsSaving(false);
     }
@@ -344,7 +342,8 @@ export default function CustomersPage() {
             <CardHeader>
               <CardTitle>ثبت مشتری جدید</CardTitle>
               <CardDescription>
-                نام و شماره موبایل الزامی هستند. سایر اطلاعات را می‌توانی بعداً تکمیل کنی.
+                نام و شماره موبایل الزامی هستند. سایر اطلاعات را می‌توانی بعداً
+                تکمیل کنی.
               </CardDescription>
             </CardHeader>
 
@@ -352,9 +351,7 @@ export default function CustomersPage() {
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   <div className="space-y-2">
-                    <Label htmlFor="fullName">
-                      نام و نام خانوادگی *
-                    </Label>
+                    <Label htmlFor="fullName">نام و نام خانوادگی *</Label>
                     <Input
                       id="fullName"
                       value={form.fullName}
@@ -542,9 +539,7 @@ export default function CustomersPage() {
                       <TableRow key={customer.id}>
                         <TableCell>
                           <div className="min-w-32 space-y-1">
-                            <p className="font-medium">
-                              {customer.fullName}
-                            </p>
+                            <p className="font-medium">{customer.fullName}</p>
                             <Badge
                               variant={
                                 customer.isActive ? "secondary" : "outline"

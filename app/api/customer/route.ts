@@ -137,6 +137,7 @@ export async function GET(request: Request) {
           city: true,
           customerType: true,
           description: true,
+           isActive: true,
           createdAt: true,
           updatedAt: true,
         },
