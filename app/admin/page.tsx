@@ -1,31 +1,38 @@
-
 import { redirect } from "next/navigation";
 import { Sprout, Users, Package, ClipboardList, LogOut } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
 import { LogoutButton } from "@/components/auth/logout-button";
-
+import Link from "next/link";
 
 const sections = [
+  {
+    title: "مدیریت مشتریان",
+    description: "ثبت مشتری، جست‌وجو و مشاهده اطلاعات تماس",
+    icon: Users,
+    href: "/customers",
+  },
   {
     title: "کاربران و دسترسی‌ها",
     description: "مدیریت کاربران، نقش‌ها و مجوزها",
     icon: Users,
+    href: "#",
   },
   {
     title: "محصولات نشاء",
     description: "مدیریت انواع نشاء و اطلاعات محصولات",
     icon: Package,
+    href: "#",
   },
   {
     title: "تولید و موجودی",
     description: "پیگیری دوره‌های تولید و موجودی انبار",
     icon: ClipboardList,
+    href: "#",
   },
 ];
 
 export default async function AdminPage() {
-
   const user = await getCurrentUser();
 
   if (!user) {
@@ -86,13 +93,21 @@ export default async function AdminPage() {
                 key={section.title}
                 className="rounded-xl border bg-background p-5 shadow-sm"
               >
-                <div className="mb-4 flex size-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-800">
-                  <Icon className="size-5" />
-                </div>
-                <h3 className="font-semibold">{section.title}</h3>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {section.description}
-                </p>
+                <Link
+                  key={section.title}
+                  href={section.href}
+                  className="block rounded-xl border bg-background p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md"
+                >
+                  <div className="mb-4 flex size-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-800">
+                    <Icon className="size-5" />
+                  </div>
+
+                  <h3 className="font-semibold">{section.title}</h3>
+
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {section.description}
+                  </p>
+                </Link>
               </div>
             );
           })}
